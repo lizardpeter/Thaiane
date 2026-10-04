@@ -1,0 +1,148 @@
+name: Rust WASM Toolchain Bundle
+
+on:
+  push:
+    branches:
+      - rust-wasm-toolchain-bootstrap
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust + WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+
+      - name: Install Binaryen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+
+      - name: Warm Rust/Cargo/Trunk caches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/rust-wasm-bootstrap
+          mkdir -p /tmp/rust-wasm-bootstrap/src
+          cat > /tmp/rust-wasm-bootstrap/Cargo.toml <<'EOF'
+          [package]
+          name = "rust-webgpu-ios-demo"
+          version = "0.3.0"
+          edition = "2024"
+          rust-version = "1.87"
+
+          [lib]
+          crate-type = ["cdylib"]
+
+          [dependencies]
+          bytemuck = { version = "1.24", features = ["derive"] }
+          console_error_panic_hook = "0.1"
+          wasm-bindgen = "0.2"
+          wasm-bindgen-futures = "0.4"
+          wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "webgpu"] }
+          web-sys = { version = "0.3", features = [
+              "Document",
+              "DomRect",
+              "Element",
+              "Event",
+              "EventTarget",
+              "HtmlCanvasElement",
+              "HtmlElement",
+              "KeyboardEvent",
+              "MouseEvent",
+              "PointerEvent",
+              "Window",
+              "console",
+          ] }
+
+          [profile.release]
+          opt-level = 3
+          lto = true
+          codegen-units = 1
+          panic = "abort"
+          strip = true
+          EOF
+
+          cat > /tmp/rust-wasm-bootstrap/src/lib.rs <<'EOF'
+          use wasm_bindgen::prelude::*;
+
+          #[wasm_bindgen(start)]
+          pub fn start() {}
+          EOF
+
+          cat > /tmp/rust-wasm-bootstrap/index.html <<'EOF'
+          <!doctype html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <link data-trunk rel="rust"
+              data-wasm-opt="4"
+              data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext --enable-mutable-globals">
+          </head>
+          <body></body>
+          </html>
+          EOF
+
+          cd /tmp/rust-wasm-bootstrap
+          cargo generate-lockfile
+          cargo fetch --locked --target wasm32-unknown-unknown
+          trunk build --release
+
+          WB_VERSION="$(awk '/name = "wasm-bindgen"/ {getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)"
+          echo "wasm-bindgen version: $WB_VERSION"
+          cargo install wasm-bindgen-cli --version "$WB_VERSION" --locked
+
+          mkdir -p "$HOME/.cargo/bin"
+          cp "$(command -v trunk)" "$HOME/.cargo/bin/trunk"
+          cp "$(command -v wasm-opt)" "$HOME/.cargo/bin/wasm-opt"
+
+          rustc -V
+          cargo -V
+          trunk --version
+          wasm-bindgen --version
+          wasm-opt --version
+
+      - name: Create portable bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/rust-wasm-toolchain"
+          cp -a "$HOME/.cargo" "$RUNNER_TEMP/rust-wasm-toolchain/"
+          cp -a "$HOME/.rustup" "$RUNNER_TEMP/rust-wasm-toolchain/"
+          if [ -d "$HOME/.cache" ]; then
+            cp -a "$HOME/.cache" "$RUNNER_TEMP/rust-wasm-toolchain/"
+          fi
+
+          cat > "$RUNNER_TEMP/rust-wasm-toolchain/README.txt" <<EOF
+          Built on: ubuntu-22.04 x86_64
+          Rust: $(rustc -V)
+          Cargo: $(cargo -V)
+          Trunk: $(trunk --version)
+          wasm-bindgen: $(wasm-bindgen --version)
+          wasm-opt: $(wasm-opt --version)
+          Includes Cargo registry/cache and wasm32-unknown-unknown target.
+          EOF
+
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/rust-wasm-toolchain-linux-x86_64.tgz" rust-wasm-toolchain
+          ls -lh "$RUNNER_TEMP/rust-wasm-toolchain-linux-x86_64.tgz"
+
+      - name: Upload toolchain artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-wasm-toolchain-linux-x86_64
+          path: ${{ runner.temp }}/rust-wasm-toolchain-linux-x86_64.tgz
+          compression-level: 0
+          retention-days: 1
