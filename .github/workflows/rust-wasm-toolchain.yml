@@ -106,8 +106,14 @@ jobs:
           cargo install wasm-bindgen-cli --version "$WB_VERSION" --locked
 
           mkdir -p "$HOME/.cargo/bin"
-          cp "$(command -v trunk)" "$HOME/.cargo/bin/trunk"
-          cp "$(command -v wasm-opt)" "$HOME/.cargo/bin/wasm-opt"
+          TRUNK_PATH="$(command -v trunk)"
+          WASM_OPT_PATH="$(command -v wasm-opt)"
+          if [ "$TRUNK_PATH" != "$HOME/.cargo/bin/trunk" ]; then
+            cp "$TRUNK_PATH" "$HOME/.cargo/bin/trunk"
+          fi
+          if [ "$WASM_OPT_PATH" != "$HOME/.cargo/bin/wasm-opt" ]; then
+            cp "$WASM_OPT_PATH" "$HOME/.cargo/bin/wasm-opt"
+          fi
 
           rustc -V
           cargo -V
