@@ -1,0 +1,38 @@
+name: Binaryen Runtime Bundle
+
+on:
+  push:
+    branches:
+      - rust-wasm-toolchain-bootstrap
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install Binaryen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+
+      - name: Package runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/binaryen-runtime"
+          cp "$(command -v wasm-opt)" "$RUNNER_TEMP/binaryen-runtime/"
+          cp -a /usr/lib/x86_64-linux-gnu/libbinaryen.so* "$RUNNER_TEMP/binaryen-runtime/"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/binaryen-runtime-linux-x86_64.tgz" binaryen-runtime
+          ldd "$(command -v wasm-opt)"
+          ls -lh "$RUNNER_TEMP/binaryen-runtime-linux-x86_64.tgz"
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaryen-runtime-linux-x86_64
+          path: ${{ runner.temp }}/binaryen-runtime-linux-x86_64.tgz
+          compression-level: 0
+          retention-days: 1
