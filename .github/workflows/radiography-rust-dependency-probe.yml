@@ -1,0 +1,73 @@
+name: Rust medical imaging public build probe
+on:
+  push:
+    branches:
+      - ci/radiography-rust-dependency-probe-20261010
+  workflow_dispatch:
+
+jobs:
+  rust-dependency-api-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify rustc and Cargo
+        run: |
+          rustc --version
+          cargo --version
+      - name: Build self-contained public dependency API probe
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p /tmp/radiography-dependency-probe/src
+          cat > /tmp/radiography-dependency-probe/Cargo.toml <<'EOF'
+          [package]
+          name = "radiography-dependency-probe"
+          version = "0.0.1"
+          edition = "2024"
+
+          [dependencies]
+          dicom-object = "0.10"
+          dicom-dump = "0.10"
+          dicom-pixeldata = { version = "0.10", default-features = false, features = ["jpeg", "rle", "deflate", "image"] }
+          wgpu = "30.0.1"
+          bytemuck = { version = "1.22", features = ["derive"] }
+          EOF
+          cat > /tmp/radiography-dependency-probe/src/main.rs <<'EOF'
+          use dicom_pixeldata::PixelDecoder;
+          fn inspect(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+              let obj = dicom_object::open_file(path)?;
+              if let Ok(element) = obj.element_by_name("Modality") {
+                  let _ = element.to_str()?;
+              }
+              dicom_dump::dump_file(&obj)?;
+              let frame = obj.decode_pixel_data_frame(0)?;
+              let image = frame.to_dynamic_image(0)?;
+              image.save("/tmp/radiography-probe.png")?;
+              Ok(())
+          }
+
+          fn make_pipeline(device: &wgpu::Device) {
+              let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                  label: Some("probe"),
+                  source: wgpu::ShaderSource::Wgsl(
+                      "@compute @workgroup_size(8,8,1) fn main() {}".into()),
+              });
+              let _pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                  label: Some("probe"),
+                  layout: None,
+                  module: &shader,
+                  entry_point: Some("main"),
+                  compilation_options: Default::default(),
+                  cache: None,
+              });
+          }
+
+          fn main() {
+              let _ = inspect as fn(&str) -> Result<(), Box<dyn std::error::Error>>;
+              let _ = make_pipeline as fn(&wgpu::Device);
+              println!("Rust medical imaging dependency APIs compiled");
+          }
+          EOF
+          cd /tmp/radiography-dependency-probe
+          cargo check --locked || cargo check
