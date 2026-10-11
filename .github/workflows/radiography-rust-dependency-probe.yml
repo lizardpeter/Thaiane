@@ -80,3 +80,25 @@ jobs:
           name: rust-toolchain-transfer-test
           path: /tmp/radiography-rustc-info.txt
           retention-days: 1
+      - name: Bundle portable Linux Rust toolchain and dependency registry
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SYSROOT="$(rustc --print sysroot)"
+          echo "Rust compiler sysroot: $SYSROOT"
+          du -sh "$SYSROOT/bin" "$SYSROOT/lib" "$HOME/.cargo/registry" || true
+          tar -C "$SYSROOT" -czf /tmp/radiography-local-rust-toolchain.tar.gz bin lib
+          tar -C "$HOME" -czf /tmp/radiography-cargo-registry.tar.gz .cargo/registry
+          ls -lh /tmp/radiography-local-rust-toolchain.tar.gz /tmp/radiography-cargo-registry.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radiography-local-rust-toolchain
+          path: /tmp/radiography-local-rust-toolchain.tar.gz
+          retention-days: 1
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radiography-local-cargo-registry
+          path: /tmp/radiography-cargo-registry.tar.gz
+          retention-days: 1
+          compression-level: 0
