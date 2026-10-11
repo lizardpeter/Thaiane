@@ -1,0 +1,35 @@
+name: Temporary native radiography dependency transfer
+on:
+  push:
+    branches: [ci/radiography-native-ui-deps-20261011]
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Fetch native wgpu desktop UI and file-dialog crates
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p /tmp/radiography-ui-deps/src
+          cat > /tmp/radiography-ui-deps/Cargo.toml <<'EOF'
+          [package]
+          name = "radiography-ui-deps"
+          version = "0.0.1"
+          edition = "2024"
+          [dependencies]
+          eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "x11", "default_fonts"] }
+          rfd = "=0.16.0"
+          EOF
+          echo 'fn main() {}' >/tmp/radiography-ui-deps/src/main.rs
+          cd /tmp/radiography-ui-deps
+          cargo fetch --target x86_64-unknown-linux-gnu
+          tar -C "$HOME" -czf /tmp/radiography-native-ui-cargo-cache.tar.gz .cargo/registry
+          ls -lh /tmp/radiography-native-ui-cargo-cache.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radiography-native-ui-cargo-cache
+          path: /tmp/radiography-native-ui-cargo-cache.tar.gz
+          retention-days: 1
+          compression-level: 0
