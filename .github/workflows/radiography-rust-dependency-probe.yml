@@ -71,3 +71,12 @@ jobs:
           EOF
           cd /tmp/radiography-dependency-probe
           cargo check --locked || cargo check
+      - name: Write toolchain transfer compatibility probe
+        run: |
+          rustc --version > /tmp/radiography-rustc-info.txt
+          cargo --version >> /tmp/radiography-rustc-info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-toolchain-transfer-test
+          path: /tmp/radiography-rustc-info.txt
+          retention-days: 1
