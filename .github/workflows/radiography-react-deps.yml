@@ -1,0 +1,28 @@
+name: Temporary public React dependency cache
+on:
+  push:
+    branches: [ci/radiography-react-deps-20261012]
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fetch open-source frontend dependencies for local offline build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/radiography-react-deps
+          cd /tmp/radiography-react-deps
+          npm init -y
+          npm install react@19 react-dom@19 @types/react@19 @types/react-dom@19 lucide-react@0.468 @tauri-apps/api@2 @tauri-apps/plugin-dialog@2 @webgpu/types@0.1.60 vite@6 @vitejs/plugin-react@4 typescript@5.8.3
+          tar -czf /tmp/react-deps.tar.gz node_modules
+          ls -lh /tmp/react-deps.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radiography-react-node-modules
+          path: /tmp/react-deps.tar.gz
+          retention-days: 1
+          compression-level: 0
